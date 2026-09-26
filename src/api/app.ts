@@ -47,6 +47,7 @@ export function createApi(adapter: MixerAdapter, allowed: readonly number[], aut
     ['/styles.css', { type: 'text/css; charset=utf-8', path: new URL('../web/styles.css', import.meta.url) }],
     ['/logo.png', { type: 'image/png', path: new URL('../web/logo.png', import.meta.url) }],
     ['/watermark.png', { type: 'image/png', path: new URL('../web/watermark.png', import.meta.url) }],
+    ['/mixer-background.jpg', { type: 'image/jpeg', path: new URL('../web/mixer-background.jpg', import.meta.url) }],
   ]);
   const writes = new Map<string, number>();
   const server = createServer(async (req, res) => {

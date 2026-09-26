@@ -586,7 +586,7 @@ function render(channels) {
         openEditModal(data.channel);
       });
 
-      namePill.append(iconWrap, title, editBtn);
+      namePill.append(title, editBtn);
 
       // 4. 立体声联动标识
       const stereoBadge = document.createElement('span');
@@ -656,7 +656,7 @@ function render(channels) {
       note.className = 'channel-note';
 
       controls.append(minus, trackWrap, plus);
-      root.append(header, controls, note);
+      root.append(iconWrap, header, controls, note);
       $('channels').append(root);
 
       card = {
@@ -1089,8 +1089,11 @@ function applyTheme(theme) {
   }
   const navBtn = $('theme-switch-nav');
   if (navBtn) {
-    navBtn.textContent = text;
-    navBtn.title = isLight ? '点击切换为 UC 官方深黑工业风' : '点击切换为实色浅色工程风';
+    navBtn.innerHTML = '<span class="theme-sun" aria-hidden="true">☼</span><span class="theme-moon" aria-hidden="true">☾</span>';
+    navBtn.setAttribute('role', 'switch');
+    navBtn.setAttribute('aria-label', '深色主题');
+    navBtn.setAttribute('aria-checked', String(!isLight));
+    navBtn.title = isLight ? '切换深色' : '切换浅色';
   }
 }
 
