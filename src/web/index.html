@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#12181b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>CECP · 耳返控制系统</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="is-login">
+<header class="masthead">
+  <div class="brand">
+    <div class="brand-text">
+      <span class="brand-title">基督教帕多瓦华人教会</span>
+      <span class="brand-sub">舞台耳返控制系统 · StudioLive 32S</span>
+    </div>
+  </div>
+  <div class="masthead-right">
+    <button type="button" class="theme-switch-btn" id="theme-switch-nav" aria-label="切换深色/浅色配色">☀️ 切换浅色</button>
+    <span class="local-label">教会舞台现场</span>
+  </div>
+</header>
+
+<main>
+<section id="login-panel" class="login-panel">
+  <div class="login-watermark" aria-hidden="true"></div>
+  
+  <div class="login-card">
+    <div class="card-system-bar">
+      <span class="system-tag">PreSonus · StudioLive 32S</span>
+      <button type="button" class="theme-switch-btn" id="theme-switch-login" aria-label="切换深色/浅色配色">☀️ 切换浅色</button>
+    </div>
+    <div class="login-header">
+      <h1 class="login-title">舞台耳返控制系统</h1>
+      <p class="login-subtitle">个人专属监听通道</p>
+    </div>
+
+    <form id="login-form" class="login-form">
+      <div class="form-field">
+        <label for="account">乐手账号</label>
+        <input id="account" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="32" placeholder="例如：钢琴、鼓、吉他、人声">
+      </div>
+
+      <div class="form-field">
+        <label for="pin">8 位数字密码</label>
+        <div class="pin-box">
+          <input id="pin" type="password" name="password" inputmode="numeric" pattern="[0-9]{8}" autocomplete="current-password" required minlength="8" maxlength="8" placeholder="请输入 8 位密码">
+          <button type="button" id="toggle-pin" class="toggle-pin-btn" aria-label="显示或隐藏密码" title="显示或隐藏密码">👁</button>
+        </div>
+      </div>
+
+      <button id="login-button" class="btn-login" type="submit">
+        <span>进入耳返控制台</span>
+        <span class="arrow-icon" aria-hidden="true">→</span>
+      </button>
+
+      <p id="login-error" class="login-error-msg" role="alert"></p>
+      <p class="login-note">每个账号只能调节分配给自己的耳返，避免误碰他人混音。</p>
+    </form>
+  </div>
+</section>
+
+<section id="mix-panel" hidden>
+  <div class="console-watermark" aria-hidden="true"></div>
+  <div class="page-heading">
+    <div>
+      <span class="eyebrow-console">当前正在调节</span>
+      <h1 id="mix-heading">我的耳返</h1>
+      <p id="account-label" class="muted-console"></p>
+    </div>
+    <button id="logout" class="quiet-btn">退出登录</button>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-left">
+      <span id="connection" role="status">正在连接调音台…</span>
+    </div>
+    <div class="status-actions">
+      <button type="button" id="toggle-demo" class="demo-btn">开启演示模式</button>
+      <button id="reconnect" class="reconnect-btn" hidden>重新连接</button>
+    </div>
+  </div>
+  <p id="notice" class="notice-console"></p>
+
+  <!-- 离线待机提示：没连接时显示，保持界面干净 -->
+  <div id="offline-prompt" class="offline-prompt">
+    <div class="offline-icon">🎚️</div>
+    <h3>调音台尚未连接</h3>
+    <p>当前处于安全待机状态。接入教会 Wi-Fi 或打开 StudioLive 32S 后将自动同步通道。</p>
+    <p class="offline-hint">确认电脑与调音台在同一局域网后，点击「重新连接」。</p>
+  </div>
+
+  <!-- 混音操作区：仅在调音台真实连接时显示 -->
+  <div id="mix-body" hidden>
+    <div class="toolbar">
+      <div class="filter-tabs">
+        <button type="button" class="tab-btn active" data-filter="all">全部通道</button>
+        <button type="button" class="tab-btn" data-filter="starred">⭐ 常用收藏</button>
+        <button type="button" class="tab-btn" data-filter="vocal">🎤 话筒人声</button>
+        <button type="button" class="tab-btn" data-filter="instrument">🎸 乐器伴奏</button>
+      </div>
+      <div class="toolbar-right">
+        <div class="mix-box">
+          <label class="mix-label" for="mix-select">当前混音</label>
+          <select id="mix-select" aria-label="选择我的混音"></select>
+        </div>
+        <label class="search-label">
+          <span class="sr-only">搜索通道</span>
+          <input id="search" type="search" placeholder="搜索通道名称或编号…" autocomplete="off">
+        </label>
+      </div>
+    </div>
+
+    <div class="instructions-console">
+      <strong>通道发送量调节</strong>
+      <span>上下单行排列 · 左右大推子拖动防误触 · 左右点按微调 1%</span>
+    </div>
+
+    <div id="channels" class="channels-stack"></div>
+    <p id="empty" class="empty-console" hidden>没有找到匹配的通道。</p>
+    <footer>只控制当前耳返发送音量。数值以调音台实时反馈为准。</footer>
+  </div>
+  <!-- 自定义通道编辑弹窗 -->
+  <dialog id="edit-channel-modal" class="console-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-channel-title">自定义通道设置</h3>
+        <button type="button" id="modal-close" class="modal-close-btn" aria-label="关闭">✕</button>
+      </div>
+      <form id="edit-channel-form">
+        <div class="modal-field">
+          <label for="edit-channel-name">通道名称</label>
+          <input type="text" id="edit-channel-name" maxlength="20" required placeholder="例如：S: verde 或 绿领唱">
+        </div>
+
+        <div class="modal-field">
+          <label>选择 UC 配色</label>
+          <div class="color-picker-grid" id="color-picker-grid"></div>
+        </div>
+
+        <div class="modal-field">
+          <label>选择图标</label>
+          <div class="icon-picker-grid" id="icon-picker-grid"></div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="modal-cancel" class="quiet-btn">取消</button>
+          <button type="submit" id="modal-save" class="demo-btn">保存设置</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+</main>
+</body>
+</html>
