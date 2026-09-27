@@ -538,3 +538,19 @@ footer { padding: 23px 0; color: var(--faint); font-size: 11px; text-align: cent
   .scale-item.scale-fifty em { transform: none; }
   .login-card { padding: 25px 8px; }
 }
+
+/* Shallow console panels: raised rims, engraved badges and tactile buttons. */
+:root { --rim-light: #ffffff18; --rim-dark: #00000055; --panel-shadow: #00000035; }
+[data-theme="light"] { --rim-light: #ffffffdb; --rim-dark: #6e68552e; --panel-shadow: #443c2417; }
+.channels-stack { border-top: 0; display: grid; gap: 9px; }
+.channel-row {
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 var(--rim-light), inset 0 -2px 0 var(--rim-dark), 0 3px 5px var(--panel-shadow);
+}
+.channel-name-pill { box-shadow: inset 0 1px 0 var(--rim-light), inset 0 -1px 0 var(--rim-dark), 0 1px 2px var(--panel-shadow); }
+.channel-badge { box-shadow: inset 0 1px 2px var(--rim-dark), 0 1px 0 var(--rim-light); border-radius: 2px; }
+.step-btn { box-shadow: inset 0 1px 0 var(--rim-light), inset 0 -2px 0 var(--rim-dark), 0 2px 2px var(--panel-shadow); }
+.step-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 2px 3px var(--rim-dark); }
+.channel-row > .ch-icon-wrap { filter: drop-shadow(0 1px 0 var(--rim-light)); }
