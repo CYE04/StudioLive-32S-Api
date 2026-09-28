@@ -8,7 +8,13 @@ export class ApiError extends Error {
 export interface MixerStatus { connected: boolean; mixer: string | null; checkedAt: string; error?: string; }
 export interface MixInfo { id: number; name: string | null; mode: string | null; modeRaw: unknown; writable: boolean; }
 export interface SendState { mix: number; channel: number; level: number; unit: 'percent'; source: 'device-snapshot' | 'device-event'; readAt: string; name?: string; writable?: boolean; linked?: boolean; }
+export interface MixMuteState { mix: number; muted: boolean; writable: boolean; source: 'device-snapshot' | 'device-event'; readAt: string; }
+export interface TalkbackState { mix: number; input: 'talkback'; level: number; unit: 'percent'; writable: boolean; source: 'device-snapshot' | 'device-event'; readAt: string; }
 export interface MixerAdapter {
+  readMute(mix: number): Promise<MixMuteState>;
+  setMute(mix: number, muted: boolean): Promise<MixMuteState>;
+  readTalkback(mix: number): Promise<TalkbackState>;
+  setTalkback(mix: number, level: number): Promise<TalkbackState>;
   connect(): Promise<void>;
   status(): Promise<MixerStatus>;
   channels(mix: number): Promise<SendState[]>;
@@ -25,4 +31,8 @@ export function assertTarget(allowed: readonly number[], mix: number, channel?: 
 export function assertLevel(level: unknown): asserts level is number {
   if (typeof level !== 'number' || !Number.isFinite(level) || level < 0 || level > 100)
     throw new ApiError(400, 'INVALID_LEVEL', 'level must be a finite number from 0 to 100 (percent, not dB)');
+}
+
+export function assertMuted(muted: unknown): asserts muted is boolean {
+  if (typeof muted !== 'boolean') throw new ApiError(400, 'INVALID_MUTE', 'muted must be a boolean');
 }

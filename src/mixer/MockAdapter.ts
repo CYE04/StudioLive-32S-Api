@@ -96,5 +96,10 @@ export class MockAdapter implements MixerAdapter {
     return this.readSend(mix, channel);
   }
 
+  // New device controls intentionally have no fabricated demo state.
+  async readMute(mix: number): Promise<never> { assertTarget(this.#allowed, mix); throw new ApiError(503, 'UNSUPPORTED_STATE', 'Real device required'); }
+  async setMute(mix: number, _muted: boolean): Promise<never> { return this.readMute(mix); }
+  async readTalkback(mix: number): Promise<never> { return this.readMute(mix); }
+  async setTalkback(mix: number, _level: number): Promise<never> { return this.readMute(mix); }
   close() {}
 }

@@ -106,6 +106,7 @@
           <label class="mix-label" for="mix-select">我的监听</label>
           <select id="mix-select" aria-label="选择我的混音"></select>
         </div>
+        <button type="button" id="aux-mute" class="quiet-btn" aria-pressed="false" disabled>静音 · 未同步</button>
         <label class="search-label">
           <span class="sr-only">搜索通道</span>
           <input id="search" type="search" placeholder="搜索通道名称或编号…" autocomplete="off">
@@ -118,9 +119,22 @@
       <span>拖动推子调节 · 两侧按钮每次微调 1%</span>
     </div>
 
+    <div class="channels-stack" aria-label="监听发送量">
     <div id="channels" class="channels-stack"></div>
+    <section id="talkback-row" class="channel-row talkback-row" hidden aria-labelledby="talkback-title">
+      <span id="talkback-icon" class="ch-icon-wrap" aria-hidden="true"></span>
+      <div class="talkback-header"><h2 id="talkback-title" class="channel-title">对讲</h2><output id="talkback-value" class="level-value"></output></div>
+      <div class="fader-controls">
+        <button type="button" id="talkback-minus" class="step-btn" aria-label="降低对讲发送量 1%" disabled>−1</button>
+        <div class="fader-track-wrap"><input id="talkback-range" type="range" min="0" max="100" step="0.01" aria-labelledby="talkback-title" disabled><div id="talkback-scale" class="fader-scale" aria-hidden="true"></div></div>
+        <button type="button" id="talkback-plus" class="step-btn" aria-label="提高对讲发送量 1%" disabled>+1</button>
+      </div>
+      <p id="talkback-note" class="channel-note">尚未读到真实对讲发送量 · 暂不可调节</p>
+    </section>
+    </div>
+    <p id="aux-control-note" class="notice-console" role="status"></p>
     <p id="empty" class="empty-console" hidden>没有找到匹配的通道。</p>
-    <footer>只控制当前耳返发送音量。数值以调音台实时反馈为准。</footer>
+    <footer>只控制当前耳返发送音量与总静音。数值以调音台实时反馈为准。</footer>
   </div>
   <!-- 自定义通道编辑弹窗 -->
   <dialog id="edit-channel-modal" class="console-modal">

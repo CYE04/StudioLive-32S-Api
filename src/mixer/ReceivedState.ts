@@ -1,4 +1,4 @@
-import { ApiError, assertTarget, type MixInfo, type SendState } from './MixerAdapter.ts';
+import { ApiError, assertTarget, type MixInfo, type SendState, type MixMuteState, type TalkbackState } from './MixerAdapter.ts';
 import { resolveMode } from './mode.ts';
 const value = (node: any): any => node && typeof node === 'object' && 'value' in node ? node.value : node;
 const off = (v: unknown) => v === 0 || v === false;
@@ -10,7 +10,7 @@ export class ReceivedState {
   snapshot(tree: any) { this.#tree = tree; this.#at = new Date().toISOString(); this.#updates.clear(); }
   update(name: unknown, incoming: unknown) {
     const key = Array.isArray(name) ? name.join('.') : typeof name === 'string' ? name.replaceAll('/', '.') : '';
-    if (!/^(line|aux)\.ch[1-9]\d*\.(aux[1-9]\d*|name|username|busmode|link)$/.test(key)) return null;
+    if (!/^(?:(line|aux)\.ch[1-9]\d*\.(aux[1-9]\d*|name|username|busmode|link|mute)|talkback\.ch1\.aux[1-9]\d*)$/.test(key)) return null;
     const [type, ch, prop] = key.split('.');
     const node = this.#tree?.[type]?.children?.[ch]?.children;
     if (!node || !Object.hasOwn(node, prop)) return null;
@@ -65,6 +65,32 @@ export class ReceivedState {
       .map(k => Number(k.slice(2)))
       .filter(ch => ch >= 1 && ch <= 32)
       .map(ch => this.read(mix, ch)).sort((a, b) => a.channel - b.channel);
+  }
+  readMute(mix: number): MixMuteState {
+    assertTarget(this.#allowed, mix);
+    const info = this.mixes().find(m => m.id === mix);
+    const raw = value(this.#tree?.aux?.children?.[`ch${mix}`]?.children?.mute);
+    if (!info || ![0, 1, false, true].includes(raw)) throw new ApiError(503, 'UNSUPPORTED_STATE', 'No reliable received AUX master mute');
+    const update = this.#updates.get(`aux.ch${mix}.mute`);
+    return { mix, muted: raw === 1 || raw === true, writable: info.writable,
+      source: update?.source ?? 'device-snapshot', readAt: update?.at ?? this.#at };
+  }
+  readTalkback(mix: number): TalkbackState {
+    assertTarget(this.#allowed, mix);
+    const info = this.mixes().find(m => m.id === mix);
+    const raw = value(this.#tree?.talkback?.children?.ch1?.children?.[`aux${mix}`]);
+    if (!info || typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || raw > 1)
+      throw new ApiError(503, 'UNSUPPORTED_STATE', 'No reliable received built-in Talkback AUX send');
+    const update = this.#updates.get(`talkback.ch1.aux${mix}`);
+    return { mix, input: 'talkback', level: raw * 100, unit: 'percent', writable: info.writable,
+      source: update?.source ?? 'device-snapshot', readAt: update?.at ?? this.#at };
+  }
+  confirmControl(state: MixMuteState | TalkbackState) {
+    const key = 'muted' in state ? `aux.ch${state.mix}.mute` : `talkback.ch1.aux${state.mix}`;
+    const previous = this.#updates.get(key);
+    if (previous && Date.parse(previous.at) > Date.parse(state.readAt)) return;
+    this.update(key, 'muted' in state ? state.muted : state.level / 100);
+    this.#updates.set(key, { at: state.readAt, source: 'device-snapshot' });
   }
   confirm(state: SendState) {
     // Only called with a separate device snapshot, never with a requested level.

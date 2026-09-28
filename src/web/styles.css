@@ -554,3 +554,9 @@ footer { padding: 23px 0; color: var(--faint); font-size: 11px; text-align: cent
 .step-btn { box-shadow: inset 0 1px 0 var(--rim-light), inset 0 -2px 0 var(--rim-dark), 0 2px 2px var(--panel-shadow); }
 .step-btn:active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 2px 3px var(--rim-dark); }
 .channel-row > .ch-icon-wrap { filter: drop-shadow(0 1px 0 var(--rim-light)); }
+
+/* Aux master controls reuse the existing console/fader presentation. */
+#aux-mute[aria-pressed="true"] { background: #a63232; border-color: #bd5555; color: #fff; }
+.talkback-row { margin-top: 0; }
+.talkback-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.talkback-row[hidden] { display: none; }

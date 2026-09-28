@@ -4,6 +4,8 @@
 
 Phase 1 真实 StudioLive 32S 连接、Aux 13 / Channel 1 写入与读回已通过；原始研究与验收记录保存在 [PHASE1.md](PHASE1.md)。Phase 2 已完成浏览器登录和真实 32 通道读取，观察到经登录请求的 44% Send 获得 `device-event` 确认。还需用户用实际手机验证 Wi-Fi 访问和触摸操作；没有声称已完成手机实测或长时间稳定性测试。
 
+新增：获授权 Aux 总静音及内置对讲发送量已接入，**尚未进行真实 32S 验收**。准确库 API、参数路径与现场步骤见 [Aux 总静音与对讲](docs/aux-mute-talkback.md)。Windows Nginx 默认使用 8088，正式 80 仅提供手动迁移步骤，见 [部署说明](deploy/windows/README.md)。
+
 ## 启动和使用
 
 Node.js 24+：
@@ -88,6 +90,10 @@ npm run account -- --id aux13 --name 'Aux 13 测试' --mixes 13 --reset
 | `GET /api/mixes/:mix/channels` | 只返回获配 Mix 的真实输入通道名称、Send 与可写状态 |
 | `GET /api/mixes/:mix/channels/:channel` | 同上；单通道 |
 | `PATCH /api/mixes/:mix/channels/:channel` | 需登录、CSRF、双重 Mix 权限；仅接受 `{level:number}`，0–100 |
+| `GET /api/mixes/:mix/mute` | 读取本人 Aux Master Mute |
+| `PATCH /api/mixes/:mix/mute` | 需登录、CSRF、双重 Mix 权限；仅接受 `{muted:boolean}` |
+| `GET /api/mixes/:mix/talkback` | 读取内置对讲到本人 Aux 的发送量 |
+| `PATCH /api/mixes/:mix/talkback` | 需登录、CSRF、双重 Mix 权限；仅接受 `{level:number}`，0–100 |
 
 旧 Phase 1 无登录的 curl 调用现在会返回 401，这是预期行为。获配 Aux 13 的账号即使手工请求 Mix 1，GET 和 PATCH 都返回 403，且在调用 adapter 前拒绝。
 
@@ -95,8 +101,8 @@ npm run account -- --id aux13 --name 'Aux 13 测试' --mixes 13 --reset
 
 - PIN 是随机 8 位数字，scrypt 加盐哈希；登录最多每 IP 20 次/15 分钟、每账号 10 次/15 分钟（含成功尝试）。错误不泄露账号是否存在。重启会清空内存限流记录。
 - 会话随机 256 位，固定 8 小时；cookie HttpOnly、SameSite=Strict；写操作必须附带独立随机 CSRF token。无 CORS，校验同源 Origin 和本机/LAN Host，忽略代理转发 IP。
-- API 只接受直接来自 loopback/私有 LAN 的连接。此版本是可信局域网 HTTP，PIN 和 cookie **没有传输加密**；不用于共享不可信网络、端口转发或 Internet。没有配置公网域名、PWA、反向代理或云部署。
-- 只有 `LINE` → `AUX` 的 Send 写入口。Main LR、Mute、Gain、48V、Routing、Scenes、Preamp 等均未开放。
+- API 只接受直接来自 loopback/私有 LAN 的连接。此版本是可信局域网 HTTP，PIN 和 cookie **没有传输加密**；不用于共享不可信网络、端口转发或 Internet。未提供公网访问、PWA 或云部署；本地 Nginx 配置另在代理入口限制允许网段。
+- 仅提供 `LINE` / 内置 `TALKBACK` → `AUX` Send 与获授权 Aux Master Mute 写入口。Main LR、Input/Send Mute、Gain、48V、Routing、Scenes、Preamp 等均未开放。
 - 未知模式、未知链接状态或立体声链接的输入/总线保持只读，包括相邻配对通道检查。UI 会明确标注；不自动解除链接或更改模式。当前 Piano 等已链接输入因此只读，这是有意保留的限制。
 - 同时只确认一次设备写入；页面请求限速且无自动写入重试。断线期间没有可提交的推子操作。
 
@@ -124,14 +130,14 @@ Browser → HTTP API + AuthService → MixerAdapter → StudioLiveAdapter
 
 服务端始终使用真实 `StudioLiveAdapter`，不再通过 `DEMO_MODE` 切换到模拟调音台。页面每次加载或登录默认关闭演示；只有手动点击“开启演示模式”才使用页面内的演示电平，且不会发送 AUX 写入请求。刷新、重新登录或点击“退出演示，返回实机”后恢复真实设备读取。演示不是连接成功或实机测试的证据。
 
-页面仅显示输入 1–30，隐藏 31、32。名称和图标为本地显示配置，不会修改调音台名称或路由。默认名称按现场清单设置，其中 Mixer2 按 25–26 处理，MP3 为 27–28，PCPodio 为 29–30。图标采用本机 Universal Control 的原版 SVG，来源记录见 [docs/uc-icons.md](docs/uc-icons.md)。
+页面仅显示普通输入 5–30，隐藏 Coro 1–4 及 31、32；另有独立的内置“对讲”推子。名称和图标为本地显示配置，不会修改调音台名称或路由。默认名称按现场清单设置，其中 Mixer2 按 25–26 处理，MP3 为 27–28，PCPodio 为 29–30。图标采用本机 Universal Control 的原版 SVG，来源记录见 [docs/uc-icons.md](docs/uc-icons.md)。
 
 ```sh
 npm run check
 npm test
 ```
 
-8 项测试覆盖 PIN 哈希/错误密码/限流/会话撤销、白名单和账号权限交集、CSRF、未登录与越权 HTTP 请求、严格 JSON/数值、未知模式与配对链接保护。测试中的状态结构只用于 reducer 单元测试，不是设备模拟器，也不作为实机成功证据。
+16 项测试覆盖 PIN 哈希/错误密码/限流/会话撤销、白名单和账号权限交集、CSRF、未登录与越权 HTTP 请求、严格 JSON/数值、未知模式与配对链接保护。测试中的状态结构只用于 reducer 单元测试，不是设备模拟器，也不作为实机成功证据。
 
 现场 Phase 2 检查：
 

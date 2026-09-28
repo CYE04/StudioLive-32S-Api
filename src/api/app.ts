@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { networkInterfaces, hostname } from 'node:os';
-import { ApiError, assertLevel, assertTarget, type MixerAdapter } from '../mixer/MixerAdapter.ts';
+import { ApiError, assertMuted, assertLevel, assertTarget, type MixerAdapter } from '../mixer/MixerAdapter.ts';
 import { AuthService } from '../auth/AuthService.ts';
 export function isLocalAddress(address: string) {
   const ip = address.replace(/^::ffff:/, '');
@@ -78,7 +78,7 @@ export function createApi(adapter: MixerAdapter, allowed: readonly number[], aut
       if (path === '/api/login' && req.method === 'POST') {
         const input = await body(req); fields(input, ['account', 'pin']);
         const session = await auth.login(input.account, input.pin, req.socket.remoteAddress ?? 'unknown');
-        // HTTP is intentionally limited to a trusted LAN; no proxy/public hosting.
+        // HTTP is limited to the trusted LAN (including the restricted local proxy).
         res.setHeader('Set-Cookie', `cecp_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`);
         result = auth.publicSession(session, allowed);
       } else {
@@ -106,6 +106,19 @@ export function createApi(adapter: MixerAdapter, allowed: readonly number[], aut
           const merged = { ...current, ...input };
           writeFileSync(channelConfigFile, JSON.stringify(merged, null, 2) + '\n', 'utf8');
           result = { ok: true, config: merged };
+        } else if (/^\/api\/mixes\/([1-9]\d*)\/(mute|talkback)$/.test(path)) {
+          const match = /^\/api\/mixes\/([1-9]\d*)\/(mute|talkback)$/.exec(path)!;
+          const mix = Number(match[1]), mute = match[2] === 'mute';
+          auth.authorize(session, mix, allowed); assertTarget(allowed, mix);
+          if (req.method === 'GET') result = mute ? await adapter.readMute(mix) : await adapter.readTalkback(mix);
+          else if (req.method === 'PATCH') {
+            const input = await body(req); fields(input, [mute ? 'muted' : 'level']);
+            if (mute) assertMuted(input.muted); else assertLevel(input.level);
+            const now = Date.now();
+            if (now - (writes.get(session.account.id) ?? 0) < 150) throw new ApiError(429, 'SEND_RATE_LIMIT', 'Adjust more slowly');
+            writes.set(session.account.id, now);
+            result = mute ? await adapter.setMute(mix, input.muted) : await adapter.setTalkback(mix, input.level);
+          } else throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Use GET or PATCH');
         } else {
           const match = /^\/api\/mixes\/([1-9]\d*)\/channels(?:\/([1-9]\d*))?$/.exec(path);
           if (!match) throw new ApiError(404, 'NOT_FOUND', 'Unknown endpoint');

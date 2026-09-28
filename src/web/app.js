@@ -5,6 +5,7 @@ let session = null, selectedMix = null, online = false, sending = false, polling
 let currentFilter = 'all';
 // Old preview flags cannot bypass real device requests.
 sessionStorage.removeItem('cecp_demo_mode');
+let mixMute = null, talkbackState = null, talkbackEditing = false;
 let demoMode = false; // Opt-in only, never restored across login or reload.
 const demoLevels = new Map();
 const cards = new Map();
@@ -75,30 +76,6 @@ function isLightColor(hex) {
 const LINKED_PAIR_SET = new Set([19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]);
 
 const DEFAULT_CHANNEL_CONFIG = {
-  "1": {
-    "name": "Coro 1",
-    "color": "#808080",
-    "icon": "choir",
-    "textColor": "#ffffff"
-  },
-  "2": {
-    "name": "Coro 2",
-    "color": "#808080",
-    "icon": "choir",
-    "textColor": "#ffffff"
-  },
-  "3": {
-    "name": "Coro 3",
-    "color": "#808080",
-    "icon": "choir",
-    "textColor": "#ffffff"
-  },
-  "4": {
-    "name": "Coro 4",
-    "color": "#808080",
-    "icon": "choir",
-    "textColor": "#ffffff"
-  },
   "5": {
     "name": "S:Verde",
     "color": "#22c55e",
@@ -365,7 +342,8 @@ async function loadChannelConfig() {
   try {
     const res = await api('/api/channels/config');
     if (res && typeof res === 'object') {
-      channelConfig = res;
+      // Ignore retired Coro appearance entries without rewriting saved device/user data.
+      channelConfig = Object.fromEntries(Object.entries(res).filter(([id]) => !['1', '2', '3', '4'].includes(id)));
     }
   } catch (e) {
     console.warn('读取通道配置失败:', e);
@@ -374,7 +352,7 @@ async function loadChannelConfig() {
 
 function showLogin() {
   demoMode = false; demoLevels.clear();
-  epoch++; session = null; selectedMix = null; cards.clear();
+  epoch++; session = null; selectedMix = null; mixMute = null; talkbackState = null; talkbackEditing = false; cards.clear();
   if ($('channels')) $('channels').replaceChildren();
   online = false; sending = false; needsCheck = false;
   document.body.classList.add('is-login');
@@ -394,6 +372,15 @@ function updateDisabled() {
       }
     }
   }
+  const unavailable = !online || demoMode || needsCheck || sending;
+  $('aux-mute').disabled = unavailable || mixMute?.mix !== selectedMix || !mixMute?.writable;
+  $('aux-mute').textContent = mixMute?.mix === selectedMix && !demoMode ? (mixMute.muted ? '已静音' : '静音') : '静音 · 未同步';
+  $('aux-mute').setAttribute('aria-pressed', String(!demoMode && mixMute?.mix === selectedMix && mixMute.muted));
+  for (const id of ['talkback-range', 'talkback-minus', 'talkback-plus']) $(id).disabled = unavailable || talkbackState?.mix !== selectedMix || !talkbackState?.writable;
+  const hasTalkback = !demoMode && talkbackState?.mix === selectedMix;
+  if (!hasTalkback) $('talkback-value').textContent = '未同步';
+  $('talkback-note').textContent = demoMode ? '对讲需要真实调音台，演示中不可调节' : !hasTalkback ? '尚未读到真实对讲发送量 · 暂不可调节' : !online || needsCheck ? '连接中断 · 重新同步后可调节' : !talkbackState.writable ? '只读 · 调音台保护' : '内置对讲 → 当前监听 · 调音台实时反馈';
+  filter();
   $('mix-select').disabled = isOffline || sending;
   $('reconnect').disabled = sending;
 }
@@ -529,7 +516,7 @@ function updateCard(card, data, allChannels = []) {
 }
 
 function render(channels) {
-  const sorted = channels.filter(c => c.channel >= 1 && c.channel <= 30).sort((a, b) => a.channel - b.channel);
+  const sorted = channels.filter(c => c.channel >= 5 && c.channel <= 30).sort((a, b) => a.channel - b.channel);
   const displayChannels = sorted.filter(c => !isSlaveChannel(c, sorted));
   const displaySet = new Set(displayChannels.map(d => d.channel));
 
@@ -636,16 +623,7 @@ function render(channels) {
       const scale = document.createElement('div');
       scale.className = 'fader-scale';
       scale.setAttribute('aria-hidden', 'true');
-      scale.innerHTML = FADER_MARKS.map(mark => {
-        const classes = ['scale-item'];
-        if (mark.db === null) classes.push('scale-inf');
-        if (mark.db === -50) classes.push('scale-fifty');
-        if (mark.db === 0) classes.push('scale-unity');
-        if ([-40, -30].includes(mark.db)) classes.push('scale-minor');
-        if ([-60, -40].includes(mark.db)) classes.push('scale-stagger');
-        const title = mark.db === null ? '静音 (−∞ dB)' : mark.db === 0 ? 'U = 0 dB' : `${mark.label} dB`;
-        return `<span class="${classes.join(' ')}" style="--pos: ${mark.pct}%" data-level="${mark.pct}" title="${title}"><i></i><em>${mark.label}</em></span>`;
-      }).join('');
+      scale.innerHTML = faderScaleMarkup();
 
       scale.addEventListener('click', (e) => {
         const item = e.target.closest('.scale-item');
@@ -741,7 +719,9 @@ function filter() {
     card.root.hidden = !show;
     if (show) visible++;
   }
-  $('empty').hidden = visible !== 0;
+  const showTalkback = selectedMix !== null && (!query || '对讲 talkback'.includes(query)) && ['all', 'vocal'].includes(currentFilter);
+  $('talkback-row').hidden = !showTalkback;
+  $('empty').hidden = visible !== 0 || showTalkback;
 }
 
 async function send(card, level) {
@@ -790,6 +770,42 @@ async function send(card, level) {
   }
 }
 
+function faderScaleMarkup() { return FADER_MARKS.map(mark => {
+        const classes = ['scale-item'];
+        if (mark.db === null) classes.push('scale-inf');
+        if (mark.db === -50) classes.push('scale-fifty');
+        if (mark.db === 0) classes.push('scale-unity');
+        if ([-40, -30].includes(mark.db)) classes.push('scale-minor');
+        if ([-60, -40].includes(mark.db)) classes.push('scale-stagger');
+        const title = mark.db === null ? '静音 (−∞ dB)' : mark.db === 0 ? 'U = 0 dB' : `${mark.label} dB`;
+        return `<span class="${classes.join(' ')}" style="--pos: ${mark.pct}%" data-level="${mark.pct}" title="${title}"><i></i><em>${mark.label}</em></span>`;
+      }).join(''); }
+
+function renderAuxControls() {
+  if (!demoMode && talkbackState?.mix === selectedMix && !talkbackEditing) {
+    $('talkback-range').value = talkbackState.level;
+    updateLevelOutput($('talkback-value'), talkbackState.level);
+  }
+  updateDisabled();
+}
+async function sendAuxControl(kind, value) {
+  const current = kind === 'mute' ? mixMute : talkbackState;
+  if (!online || demoMode || sending || needsCheck || current?.mix !== selectedMix || !current?.writable) { talkbackEditing = false; renderAuxControls(); return; }
+  const currentEpoch = ++epoch, mix = selectedMix;
+  sending = true; updateDisabled();
+  $('aux-control-note').textContent = '正在等待调音台确认…';
+  try {
+    const actual = await api(`/api/mixes/${mix}/${kind}`, { method: 'PATCH', body: JSON.stringify(kind === 'mute' ? { muted: value } : { level: value }) });
+    if (currentEpoch !== epoch) return;
+    if (kind === 'mute') mixMute = actual; else talkbackState = actual;
+    $('aux-control-note').textContent = kind === 'mute' ? (actual.muted ? '已确认：当前监听总静音' : '已确认：当前监听取消静音') : '已确认：对讲发送量已更新';
+  } catch (error) {
+    if (currentEpoch === epoch) { needsCheck = true; connection(false); $('notice').textContent = error.message; }
+  } finally {
+    if (currentEpoch === epoch) { sending = false; talkbackEditing = false; renderAuxControls(); }
+  }
+}
+
 async function refresh() {
   if (!session || polling || sending) return;
   if (demoMode) {
@@ -802,8 +818,8 @@ async function refresh() {
     $('mix-heading').textContent = '耳返界面 · 演示预览';
     connection(false);
     const locked = new Set(session.account.lockedChannels ?? []);
-    const demoChannels = Array.from({ length: 30 }, (_, i) => {
-      const channel = i + 1, partner = channel % 2 ? channel + 1 : channel - 1;
+    const demoChannels = Array.from({ length: 26 }, (_, i) => {
+      const channel = i + 5, partner = channel % 2 ? channel + 1 : channel - 1;
       const linked = LINKED_PAIR_SET.has(channel);
       const isLocked = locked.has(channel) || (linked && locked.has(partner));
       return { mix: selectedMix, channel, name: getUcChannelInfo(channel).name, level: demoLevels.get(`${selectedMix}:${channel}`) ?? 0,
@@ -824,7 +840,7 @@ async function refresh() {
     if (currentEpoch !== epoch) return;
     const ids = mixes.map(m => m.id);
     if (!ids.includes(selectedMix)) {
-      selectedMix = ids[0] ?? null;
+      selectedMix = ids[0] ?? null; mixMute = null; talkbackState = null;
       cards.clear();
       $('channels').replaceChildren();
     }
@@ -851,6 +867,13 @@ async function refresh() {
       linked: isChannelLinked(c, channels)
     }));
     if (currentEpoch === epoch && !sending) render(enhancedChannels);
+    if (currentEpoch !== epoch || sending) return;
+    const results = await Promise.allSettled(['mute', 'talkback'].map(kind => api(`/api/mixes/${selectedMix}/${kind}`)));
+    if (currentEpoch !== epoch || sending) return;
+    mixMute = results[0].status === 'fulfilled' ? results[0].value : null;
+    talkbackState = results[1].status === 'fulfilled' ? results[1].value : null;
+    $('aux-control-note').textContent = [!mixMute ? '总静音状态暂不可用' : '', !talkbackState ? '调音台尚未提供可读取的对讲发送量' : ''].filter(Boolean).join(' · ');
+    renderAuxControls();
   } catch (error) {
     if (currentEpoch === epoch) {
       connection(false);
@@ -990,7 +1013,7 @@ async function enter(result) {
   session = result;
   needsCheck = false;
   online = false;
-  selectedMix = null;
+  selectedMix = null; mixMute = null; talkbackState = null; talkbackEditing = false;
   document.body.classList.remove('is-login');
   if ($('loading')) $('loading').hidden = true;
   if ($('login-panel')) $('login-panel').hidden = true;
@@ -1029,7 +1052,7 @@ $('logout').addEventListener('click', async () => {
 
 $('mix-select').addEventListener('change', () => {
   epoch++;
-  selectedMix = Number($('mix-select').value);
+  selectedMix = Number($('mix-select').value); mixMute = null; talkbackState = null; talkbackEditing = false; updateDisabled();
   cards.clear();
   $('channels').replaceChildren();
   void refresh();
@@ -1054,7 +1077,7 @@ $('toggle-pin')?.addEventListener('click', () => {
 
 $('toggle-demo').addEventListener('click', () => {
   if (sending) return;
-  epoch++; demoMode = !demoMode; needsCheck = false; selectedMix = null;
+  epoch++; demoMode = !demoMode; needsCheck = false; selectedMix = null; mixMute = null; talkbackState = null; talkbackEditing = false;
   cards.clear(); $('channels').replaceChildren();
   $('notice').textContent = demoMode ? '仅在此页面预览。刷新或重新登录后，演示自动关闭。' : '已退出演示，正在读取真实设备。';
   connection(false); void refresh();
@@ -1117,3 +1140,16 @@ function toggleTheme() {
   try { await enter(await api('/api/session')); }
   catch { showLogin(); }
 })();
+
+$('aux-mute').addEventListener('click', () => { if (mixMute) void sendAuxControl('mute', !mixMute.muted); });
+$('talkback-range').addEventListener('input', () => { talkbackEditing = true; updateLevelOutput($('talkback-value'), Number($('talkback-range').value)); });
+$('talkback-range').addEventListener('change', () => { talkbackEditing = false; void sendAuxControl('talkback', Number($('talkback-range').value)); });
+$('talkback-range').addEventListener('pointercancel', () => { talkbackEditing = false; renderAuxControls(); });
+$('talkback-minus').addEventListener('click', () => { if (talkbackState) void sendAuxControl('talkback', Math.max(0, Number((talkbackState.level - 1).toFixed(1)))); });
+$('talkback-plus').addEventListener('click', () => { if (talkbackState) void sendAuxControl('talkback', Math.min(100, Number((talkbackState.level + 1).toFixed(1)))); });
+$('talkback-scale').innerHTML = faderScaleMarkup();
+$('talkback-icon').innerHTML = ICONS.mic;
+$('talkback-scale').addEventListener('click', event => {
+  const mark = event.target.closest('.scale-item');
+  if (mark) void sendAuxControl('talkback', Number(mark.dataset.level));
+});

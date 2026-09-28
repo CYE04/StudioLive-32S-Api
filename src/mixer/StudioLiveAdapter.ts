@@ -1,5 +1,5 @@
 import { fork, type ChildProcess } from 'node:child_process';
-import { ApiError, assertLevel, assertTarget, type MixerAdapter, type MixerStatus, type MixInfo, type SendState } from './MixerAdapter.ts';
+import { ApiError, assertMuted, assertLevel, assertTarget, type MixMuteState, type TalkbackState, type MixerAdapter, type MixerStatus, type MixInfo, type SendState } from './MixerAdapter.ts';
 export class StudioLiveAdapter implements MixerAdapter {
   #ip: string; #allowed: number[]; #child?: ChildProcess; #closed = false; #ready = false;
   #nextId = 0; #starting?: Promise<void>; #lastAttempt = 0; #error = 'Not connected';
@@ -74,6 +74,16 @@ export class StudioLiveAdapter implements MixerAdapter {
     const actual = await this.#request<SendState>({ kind: 'write', mix, channel, level });
     console.log(`Confirmed Mix ${mix} / Channel ${channel}: ${actual.level}% (${actual.source})`);
     return actual;
+  }
+  readMute(mix: number) { assertTarget(this.#allowed, mix); return this.#request<MixMuteState>({ kind: 'readMute', mix }); }
+  setMute(mix: number, muted: boolean) {
+    assertTarget(this.#allowed, mix); assertMuted(muted);
+    return this.#request<MixMuteState>({ kind: 'writeMute', mix, muted });
+  }
+  readTalkback(mix: number) { assertTarget(this.#allowed, mix); return this.#request<TalkbackState>({ kind: 'readTalkback', mix }); }
+  setTalkback(mix: number, level: number) {
+    assertTarget(this.#allowed, mix); assertLevel(level);
+    return this.#request<TalkbackState>({ kind: 'writeTalkback', mix, level });
   }
   close() { this.#closed = true; this.#stop('Service stopped'); }
 }
